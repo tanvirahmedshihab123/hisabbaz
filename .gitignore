@@ -1,0 +1,86 @@
+# ══════════════════════════════════════════════════════════
+#  Node.js
+# ══════════════════════════════════════════════════════════
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+
+# ══════════════════════════════════════════════════════════
+#  Environment Variables (CRITICAL — never commit!)
+# ══════════════════════════════════════════════════════════
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+*.env
+!.env.example
+
+# ══════════════════════════════════════════════════════════
+#  Logs
+# ══════════════════════════════════════════════════════════
+logs/
+*.log
+morgan.log
+
+# ══════════════════════════════════════════════════════════
+#  Build output
+# ══════════════════════════════════════════════════════════
+dist/
+build/
+out/
+.next/
+.cache/
+
+# ══════════════════════════════════════════════════════════
+#  Uploads (local multer temp — Cloudinary stores the real files)
+# ══════════════════════════════════════════════════════════
+uploads/
+tmp/
+temp/
+public/uploads/
+
+# ══════════════════════════════════════════════════════════
+#  OS Files
+# ══════════════════════════════════════════════════════════
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ══════════════════════════════════════════════════════════
+#  IDE / Editor
+# ══════════════════════════════════════════════════════════
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# ══════════════════════════════════════════════════════════
+#  Misc
+# ══════════════════════════════════════════════════════════
+coverage/
+.nyc_output/
+.eslintcache
+.nodemonignore
+*.tsbuildinfo
+.pm2/
+.pids
+*.pid
+*.seed
+*.pid.lock
