@@ -8,6 +8,9 @@ const rateLimit = require("express-rate-limit");
 const connectDB = require("./config/db");
 const errorHandler = require("./middleware/errorHandler");
 const visitorTracker = require("./middleware/visitorTracker");
+const nextGenRoutes = require("./routes/nextGenRoutes");
+const adminNextGenRoutes = require("./routes/adminNextGenRoutes");
+
 
 /* ── Routes ── */
 const authRoutes = require("./routes/authRoutes");
@@ -62,7 +65,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/visitors", visitorRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/admin", adminRoutes); // ⬅️ NEW
-
+app.use("/api/nextgen", nextGenRoutes);
+app.use("/api/admin/nextgen", adminNextGenRoutes);
 /* ── 404 ── */
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Route not found" })
