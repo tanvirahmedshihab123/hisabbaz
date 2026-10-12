@@ -292,6 +292,7 @@ const crypto = require("crypto");
 const Payment = require("../models/Payment");
 const { generateEpsHash } = require("../utils/epsHash");
 const { getClientIp } = require("../utils/visitorParser");
+const NextGenApplication = require("../models/NextGenApplication");
 
 const EPS_BASE = process.env.EPS_BASE_URL;
 
@@ -626,9 +627,223 @@ const getAllPayments = async (req, res, next) => {
   }
 };
 
+/* ══════════════════════════════════════════════════════
+   POST /api/payments/nextgen-deposit
+   Initiate EPS payment for NextGen ৳200 deposit
+   ══════════════════════════════════════════════════════ */
+const initializeNextGenDeposit = async (req, res, next) => {
+  try {
+    const {
+      applicationId,
+      fullName,
+      email,
+      phone,
+      amount,
+    } = req.body;
+
+    if (!applicationId || !fullName || !phone || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
+
+    // Verify application exists
+    
+    const application = await NextGenApplication.findById(applicationId);
+    if (!application) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Application not found" });
+    }
+
+    // Unique IDs
+    const merchantTransactionId =
+      Date.now().toString() + Math.floor(Math.random() * 10000);
+    const customerOrderId = `NG-${Date.now()}`;
+
+    // Get EPS token
+    const token = await getEpsToken();
+    const xHash = generateEpsHash(merchantTransactionId);
+
+    const body = {
+      merchantId: process.env.EPS_MERCHANT_ID,
+      storeId: process.env.EPS_STORE_ID,
+      merchantTransactionId,
+      CustomerOrderId: customerOrderId,
+      transactionTypeId: 1,
+      financialEntityId: 0,
+      transitionStatusId: 0,
+      totalAmount: Number(amount),
+      ipAddress: getClientIp(req),
+      version: "1",
+      successUrl: `${process.env.FRONTEND_URL}/nextgen/payment/success?mtx=${merchantTransactionId}&appId=${applicationId}`,
+      failUrl: `${process.env.FRONTEND_URL}/nextgen/payment/failed?mtx=${merchantTransactionId}&appId=${applicationId}`,
+      cancelUrl: `${process.env.FRONTEND_URL}/nextgen/payment/cancelled?mtx=${merchantTransactionId}&appId=${applicationId}`,
+      customerName: fullName,
+      customerEmail: email || "noreply@hisabbazz.com",
+      customerAddress: "N/A",
+      customerAddress2: "",
+      customerCity: "Dhaka",
+      customerState: "Dhaka",
+      customerPostcode: "1000",
+      customerCountry: "BD",
+      customerPhone: phone,
+      shipmentName: fullName,
+      shipmentAddress: "N/A",
+      shipmentAddress2: "",
+      shipmentCity: "Dhaka",
+      shipmentState: "Dhaka",
+      shipmentPostcode: "1000",
+      shipmentCountry: "BD",
+      valueA: "",
+      valueB: "",
+      valueC: "",
+      valueD: "",
+      shippingMethod: "NO",
+      noOfItem: "1",
+      productName: "NextGen Talent Application Deposit",
+      productProfile: "general",
+      productCategory: "Application",
+      ProductList: [
+        {
+          ProductName: "NextGen Talent Application Deposit",
+          NoOfItem: "1",
+          ProductProfile: "general",
+          ProductCategory: "Application",
+          ProductPrice: String(amount),
+        },
+      ],
+    };
+
+    console.log("\n💳 ══════ NEXTGEN DEPOSIT INITIALIZE ══════");
+    console.log("Application ID:", applicationId);
+    console.log("Amount:", amount);
+
+    const { data } = await axios.post(
+      `${EPS_BASE}/v1/EPSEngine/InitializeEPS`,
+      body,
+      {
+        headers: {
+          "x-hash": xHash,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("✅ EPS Response:", JSON.stringify(data, null, 2));
+
+    // Persist payment record
+    
+    const payment = await Payment.create({
+      purpose: "nextgen_deposit",
+      nextGenApplicationId: applicationId,
+      nextGenMobile: phone,
+      amount,
+      merchantTransactionId,
+      customerOrderId,
+      storeId: process.env.EPS_STORE_ID,
+      customerName: fullName,
+      customerEmail: email,
+      customerPhone: phone,
+      gatewayResponse: data,
+      status: "pending",
+    });
+
+    const redirectUrl =
+      data?.RedirectUrl ||
+      data?.redirectUrl ||
+      data?.RedirectURL ||
+      data?.Data?.RedirectUrl ||
+      null;
+
+    res.json({
+      success: true,
+      merchantTransactionId,
+      paymentId: payment._id,
+      redirectUrl,
+    });
+  } catch (err) {
+    console.error("NextGen deposit init error:", err.response?.data || err.message);
+    res.status(500).json({
+      success: false,
+      message: err.response?.data?.errorMessage || "Payment initialization failed",
+      details: err.response?.data || err.message,
+    });
+  }
+};
+
+/* ══════════════════════════════════════════════════════
+   GET /api/payments/nextgen-verify/:mtx
+   Verify + mark deposit as paid on NextGenApplication
+   ══════════════════════════════════════════════════════ */
+const verifyNextGenDeposit = async (req, res, next) => {
+  try {
+    const { merchantTransactionId } = req.params;
+    
+    
+
+    const payment = await Payment.findOne({ merchantTransactionId });
+    if (!payment) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Payment record not found" });
+    }
+
+    const token = await getEpsToken();
+    const xHash = generateEpsHash(merchantTransactionId);
+
+    const { data } = await axios.get(
+      `${EPS_BASE}/v1/EPSEngine/CheckMerchantTransactionStatus`,
+      {
+        params: { merchantTransactionId },
+        headers: {
+          "x-hash": xHash,
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    payment.gatewayResponse = data;
+    payment.epsTransactionId = data?.EpsTransactionId;
+
+    const status = (data?.Status || "").toLowerCase();
+    if (status === "success") {
+      payment.status = "success";
+      payment.paidAt = new Date();
+
+      // Mark application deposit paid
+      if (payment.nextGenApplicationId) {
+        await NextGenApplication.findByIdAndUpdate(
+          payment.nextGenApplicationId,
+          {
+            depositPaid: true,
+            depositTransactionId: merchantTransactionId,
+          }
+        );
+      }
+    } else if (status === "failed") {
+      payment.status = "failed";
+    } else if (status.includes("cancel")) {
+      payment.status = "cancelled";
+    }
+
+    await payment.save();
+
+    res.json({ success: true, payment, epsResponse: data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
 module.exports = {
   initializePayment,
   verifyPayment,
   epsCallback,
   getAllPayments,
+  initializeNextGenDeposit,
+  verifyNextGenDeposit,
 };

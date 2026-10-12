@@ -6,7 +6,7 @@ const {
   updateApplication,
   deleteApplication,
   updateConfig,
-  getStats,
+  getStats,assignTask
 } = require("../controllers/nextGenController");
 const { protect } = require("../middleware/auth");
 const { adminOnly } = require("../middleware/adminAuth");
@@ -19,5 +19,6 @@ router.get("/applications/:id", getApplicationById);
 router.patch("/applications/:id", updateApplication);
 router.delete("/applications/:id", deleteApplication);
 router.patch("/config", updateConfig);
+router.post("/applications/:id/assign-task", assignTask); 
 
 module.exports = router;

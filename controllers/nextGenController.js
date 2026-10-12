@@ -334,6 +334,100 @@ const getStats = async (req, res, next) => {
   }
 };
 
+const checkStatus = async (req, res, next) => {
+  try {
+    const { mobile } = req.query;
+
+    if (!mobile) {
+      return res.status(400).json({
+        success: false,
+        message: "Mobile number is required",
+      });
+    }
+
+    const app = await NextGenApplication.findOne({ mobile }).select(
+      "fullName mobile status depositPaid depositRefunded createdAt adminNotes"
+    );
+
+    if (!app) {
+      return res.status(404).json({
+        success: false,
+        message: "No application found with this mobile number",
+      });
+    }
+
+    // Only return applicant-safe fields
+    res.json({
+      success: true,
+      application: {
+        fullName: app.fullName,
+        mobile: app.mobile,
+        status: app.status,
+        depositPaid: app.depositPaid,
+        depositRefunded: app.depositRefunded,
+        createdAt: app.createdAt,
+        // Status note shown to applicant
+        applicantNote: app.adminNotes ? null : undefined, // don't leak admin notes
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/* ═══════════════════════════════════════════════════════
+   POST /api/nextgen/:id/mark-deposit-paid
+   Called by payment verification to mark deposit paid
+   ═══════════════════════════════════════════════════════ */
+const markDepositPaid = async (applicationId, transactionId) => {
+  return NextGenApplication.findByIdAndUpdate(
+    applicationId,
+    {
+      depositPaid: true,
+      depositTransactionId: transactionId,
+    },
+    { new: true }
+  );
+};
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN — Assign task to applicant
+   ═══════════════════════════════════════════════════════ */
+const assignTask = async (req, res, next) => {
+  try {
+    const { taskTitle, taskDescription, dueDate } = req.body;
+
+    if (!taskTitle) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Task title is required" });
+    }
+
+    const app = await NextGenApplication.findByIdAndUpdate(
+      req.params.id,
+      {
+        assignedTask: {
+          title: taskTitle,
+          description: taskDescription || "",
+          dueDate: dueDate || null,
+          assignedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!app) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Application not found" });
+    }
+
+    res.json({ success: true, application: app });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getConfig,
   submitApplication,
@@ -343,4 +437,7 @@ module.exports = {
   deleteApplication,
   updateConfig,
   getStats,
+  checkStatus,
+  markDepositPaid,
+  assignTask,
 };
